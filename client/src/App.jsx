@@ -66,7 +66,7 @@ class App extends React.Component {
       productId = '109';
     }
     var searchParams = {};
-    var searches = window.location.search.split(/[=?]/);
+    var searches = window.location.search.split(/[=?&]/);
     for (var i = 1; i < searches.length; i = i + 2) {
       searchParams[searches[i]] = searches[i + 1];
     }
@@ -75,6 +75,7 @@ class App extends React.Component {
     var hash = window.location.hash;
     if(hash === '#availability-calendar') {
       stateObj['activeSelecting'] =  true
+      stateObj['currentlySelecting'] = 'checkIn'
       stateObj['showing'] = true;
       stateObj['showCheckAvailabilityButton'] = false;
     } else {
@@ -108,8 +109,16 @@ class App extends React.Component {
       stateObj.checkOut = cod;
 
       //SHOW RESERVE BUTTON AND RES SUMMARY
+
+      stateObj.showing = false,
+      stateObj.activeSelecting = false,
+      stateObj.showCheckAvailabilityButton = false,
+      stateObj.showReserveButton= true
+
+      window.location.hash = '';
+
     } else {
-      stateObj.currentlySelecting = 'checkOut';
+      //stateObj.currentlySelecting = 'checkOut';
       stateObj.checkOut =  'notSelected';
     }
     $.ajax({
@@ -148,6 +157,10 @@ class App extends React.Component {
           url: `/${productId}/minNightlyRate`,
           success: ({minNightlyRate}) => {
             stateObj.minNightlyRate = minNightlyRate;
+            if(stateObj.checkOut !== 'notSelected') {
+              this.getTotalPriceNew(stateObj.checkOut.toString(), stateObj.checkIn.toString(), dates);
+            }
+
             this.setState(stateObj)
           }
 
@@ -179,7 +192,8 @@ class App extends React.Component {
     this.setState({
       showing: true,
       currentlySelecting: 'checkOut',
-      activeSelecting: true
+      activeSelecting: true,
+      showReserveButton: false
     });
     window.location.hash = '#availability-calendar';
 
@@ -285,6 +299,29 @@ class App extends React.Component {
 
         this.setState({
           priceOfStay: this.state.dates[i].nightlyRate * numNights,
+          cleaningFee: thisNight.cleaningFee * numNights,
+          serviceFee: thisNight.serviceFee * numNights
+        });
+        return;
+      }
+    }
+  }
+
+  getTotalPriceNew(checkOut, checkIn, dates) {
+    var checkOutDate = new Date(checkOut);
+    var checkInDate = new Date(checkIn);
+    var numNights = Math.floor((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+    console.log(checkOutDate, checkInDate);
+    this.setState({
+      numNights: numNights
+    });
+    for (var i = 0; i < dates.length; i++) {
+      var thisNight = dates[i];
+      var thisNightDate = new Date(dates[i].date);
+      if (thisNightDate.toString().slice(0, 15) === checkInDate.toString().slice(0, 15)) {
+
+        this.setState({
+          priceOfStay: dates[i].nightlyRate * numNights,
           cleaningFee: thisNight.cleaningFee * numNights,
           serviceFee: thisNight.serviceFee * numNights
         });
