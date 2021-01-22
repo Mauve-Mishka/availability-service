@@ -54,26 +54,101 @@ class App extends React.Component {
     ];
   }
 
+  removeCheckOutFromUrl() {
+    var searchParams = {};
+    var searches = window.location.search.split(/[=?]/);
+    return `?${searches[1]}=${searches[2]}`
+  }
+
   componentDidMount() {
     var productId = window.location.pathname.split('/')[1];
     if (productId === null || productId === undefined || productId.length === 0){
       productId = '109';
     }
+    var searchParams = {};
+    var searches = window.location.search.split(/[=?]/);
+    for (var i = 1; i < searches.length; i = i + 2) {
+      searchParams[searches[i]] = searches[i + 1];
+    }
+    console.log(searchParams);
+    var stateObj = {};
+    var hash = window.location.hash;
+    if(hash === '#availability-calendar') {
+      stateObj['activeSelecting'] =  true
+      stateObj['showing'] = true;
+      stateObj['showCheckAvailabilityButton'] = false;
+    } else {
+      stateObj.activeSelecting = false;
+      stateObj.showing = false;
+      stateObj['showCheckAvailabilityButton'] = true;
+    }
+    if(searchParams['check_in'] !== undefined) {
+      //we have a check-in date
+      var cidStr = searchParams['check_in'];
+      var cidArr = cidStr.split('-');
+      var cid = new Date();
+      cid.setFullYear(cidArr[0]);
+      cid.setMonth(cidArr[1] - 1);
+      cid.setDate(cidArr[2]);
+      cid.setHours(0, 0, 0);
+      stateObj.checkIn = cid;
+      stateObj.currentlySelecting = 'checkOut';
+    } else {
+      stateObj.checkIn = 'notSelected'
+    }
+    if(searchParams['check_out'] !== undefined) {
+      //we have a check-out date
+      var codStr = searchParams['check_out'];
+      var codArr = codStr.split('-');
+      var cod = new Date();
+      cod.setFullYear(codArr[0]);
+      cod.setMonth(codArr[1] - 1);
+      cod.setDate(codArr[2]);
+      cod.setHours(0, 0, 0);
+      stateObj.checkOut = cod;
+
+      //SHOW RESERVE BUTTON AND RES SUMMARY
+    } else {
+      stateObj.currentlySelecting = 'checkOut';
+      stateObj.checkOut =  'notSelected';
+    }
     $.ajax({
       method: 'GET',
       url: `/${productId}/availableDates`,
       success: (dates) => {
-        this.setState({
-          dates: dates
-        });
+
+        if(stateObj.currentlySelecting === 'checkOut') {
+          //if a check-in date, but not check-out date, is selected, we have to find the max selectable date too
+          var checkInDate = new Date(stateObj.checkIn);
+          checkInDate.setHours(0, 0, 0);
+          var hitCheckInDate = false;
+          for (var i = 0; i < dates.length; i++) {
+            var curDate = new Date(dates[i].date);
+            curDate.setHours(0, 0, 0);
+            if (!hitCheckInDate) {
+              if (curDate.toString() === checkInDate.toString()) {
+                hitCheckInDate = true;
+              }
+            } else {
+              if (dates[i].isAvailable === false) {
+                console.log('hit max selectable date', dates[i].date);
+                stateObj['maxSelectableDate'] =  new Date(dates[i].date);
+                break;
+              }
+            }
+          }
+
+        }
+
+        stateObj.dates = dates;
+
 
         $.ajax({
           method: 'GET',
           url: `/${productId}/minNightlyRate`,
           success: ({minNightlyRate}) => {
-            this.setState({
-              minNightlyRate: minNightlyRate
-            })
+            stateObj.minNightlyRate = minNightlyRate;
+            this.setState(stateObj)
           }
 
         })
@@ -81,6 +156,7 @@ class App extends React.Component {
       },
       error: (err) => {
         console.log('GOT AN ERROR', err);
+        this.setState(stateObj);
       }
 
     });
@@ -97,6 +173,7 @@ class App extends React.Component {
       activeSelecting: true,
       showReserveButton: false
     });
+    window.location.hash = '#availability-calendar';
   }
   onClickCheckoutShowCalendar() {
     this.setState({
@@ -104,6 +181,8 @@ class App extends React.Component {
       currentlySelecting: 'checkOut',
       activeSelecting: true
     });
+    window.location.hash = '#availability-calendar';
+
   }
 
   dateClicked(e, dateIsCheckoutOnly) {
@@ -126,6 +205,7 @@ class App extends React.Component {
               currentlySelecting: 'checkOut',
               maxSelectableDate: this.state.dates[i].date
             });
+            window.location.search = `?check_in=${checkInDate.getFullYear()}-${checkInDate.getMonth()+1}-${checkInDate.getDate()}`;
             return;
           }
         }
@@ -141,7 +221,10 @@ class App extends React.Component {
         showCheckAvailabilityButton: false,
         showReserveButton: true
       });
+      window.location.hash = '';
       this.getTotalPrice(checkOutDate.toString());
+
+      window.location.search += `&check_out=${checkOutDate.getFullYear()}-${checkOutDate.getMonth()+1}-${checkOutDate.getDate()}`;
     } else if (dateIsCheckoutOnly) {
       var checkOutOnlyDate = new Date(e);
       checkOutOnlyDate.setHours(0, 0, 0);
@@ -154,6 +237,7 @@ class App extends React.Component {
   }
 
   clearDates() {
+
     this.setState({
       activeSelecting: true,
       currentlySelecting: 'checkIn',
@@ -166,6 +250,7 @@ class App extends React.Component {
       showReserveButton: false,
       maxSelectableDate: 'notSelected'
     });
+    window.location.search='';
   }
 
   closeCalendar() {
@@ -174,6 +259,7 @@ class App extends React.Component {
       currentlySelecting: 'checkIn',
       showing: false
     });
+    window.location.hash='';
   }
 
   changeHoveredDate(date) {
